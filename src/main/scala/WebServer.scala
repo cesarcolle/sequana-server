@@ -8,9 +8,8 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.marshalling.Marshal
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
-
-import scala.util.Failure
 
 
 object WebServer extends  JsonSupport {
@@ -18,14 +17,19 @@ object WebServer extends  JsonSupport {
 
   implicit def system: ActorSystem = ActorSystem()
 
-  val sequanaRoute = concat(
+  val sequanaRoute: Route = concat(
     path("restartFrequencies") {
         post {
           entity(as[Frequencies]) { freqs =>
             println()
-            complete("change make")
+            complete("change made")
           }
         }
+    }
+    ,path("data") {
+      post {
+        complete("heyho")
+      }
     }
   )
   def main(args: Array[String]): Unit = {
@@ -36,7 +40,7 @@ object WebServer extends  JsonSupport {
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   import DeviceControl._
   implicit val frequenciesM: RootJsonFormat[Frequencies] = jsonFormat1(Frequencies)
-  implicit val deviceFrequencyM  = jsonFormat2(DeviceFrequency)
+  implicit val deviceFrequencyM: RootJsonFormat[DeviceFrequency] = jsonFormat2(DeviceFrequency)
   implicit val tickM: RootJsonFormat[Tick] = jsonFormat4(Tick)
   implicit val durationM: RootJsonFormat[Duration] = jsonFormat2(Duration)
 }
@@ -44,14 +48,10 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 // ACTOR
 
 object DeviceControl {
-
   case class Frequencies(devices : List[DeviceFrequency])
-
   case class DeviceFrequency(freqs: List[Tick], device : String)
   case class Tick(day: String, hour: Int, min: Int, duration: Duration)
-
   case class Duration(hour: Int, min: Int)
-
 }
 
 class DeviceControl extends Actor {
@@ -71,24 +71,26 @@ class DeviceControl extends Actor {
           http.singleRequest(request = request)
         }
       )
-
       // TODO : Do the rest.
   }
 }
 
-
-
 // UTIL
 
 object NetworkFinder {
-  val devices = List()// TO BE COMPLETED)
+
+  val devices = List()// TO BE COMPLETED
+
+
   def addressDeviceByName() : Map[String, String] = {
-    val result = Map.empty[String, String]
+    var result = Map.empty[String, String]
     // Translate hostname by their Adress IP !
     for (inet <- devices.indices){
       try{
+        // The 192.... have to be changed.
         val inetAdress = InetAddress.getByName("192.168.0.0." + inet.toString)
-        result(inetAdress.getHostName, inetAdress)
+        result = result + (inetAdress.getHostName -> inetAdress.getHostAddress)
+
       }
       catch {
         case UnknownHostException => // NothingToDo
@@ -96,7 +98,5 @@ object NetworkFinder {
     }
     result
   }
-
-
 
 }
