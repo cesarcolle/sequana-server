@@ -1,7 +1,7 @@
 
 import java.net.{InetAddress, UnknownHostException}
 
-import DeviceControl.{Frequencies, GetAllAgenda, RestartTo}
+import DeviceControl._
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
@@ -44,6 +44,15 @@ object WebServer extends  JsonSupport {
         complete(agenda)
       }
     }
+    , path("changeADay") {
+      post {
+        entity(as[ChangeADay]) { changeDay =>
+
+
+          complete("change made")
+        }
+      }
+    }
   )
   def main(args: Array[String]): Unit = {
 
@@ -61,6 +70,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val deviceFrequencyM: RootJsonFormat[DeviceFrequency] = jsonFormat2(DeviceFrequency)
   implicit val tickM: RootJsonFormat[Tick] = jsonFormat4(Tick)
   implicit val durationM: RootJsonFormat[DurationTick] = jsonFormat2(DurationTick)
+  implicit val changeADayM: RootJsonFormat[ChangeADay] = jsonFormat3(ChangeADay)
 }
 
 // COMPANION
@@ -71,8 +81,11 @@ object DeviceControl {
   case class Tick(day: String, hour: Int, min: Int, duration: DurationTick)
   case class DurationTick(hour: Int, min: Int)
 
-  case class RestartTo(frenquences : Frequencies)
   case class GetAllAgenda()
+
+  // change
+  case class Restart(frenquences : Frequencies)
+  case class ChangeADay(sourceCaptor : String, source: Tick, to : List[Tick])
 
 
   val props: Props = Props[DeviceControl]
@@ -90,7 +103,7 @@ class DeviceControl extends Actor {
   override def receive: Receive = {
 
     // Manage frequency changes
-    case f : RestartTo =>
+    case f : Restart =>
       f.frenquences.devices.foreach(d =>
         Marshal(d.freqs).to[RequestEntity] flatMap { entity =>
           val request = HttpRequest(method = HttpMethods.POST, uri = device(d.device), entity = entity)
@@ -101,6 +114,12 @@ class DeviceControl extends Actor {
 
     case GetAllAgenda() =>
       sender() ! agenda
+
+    case c : ChangeADay =>
+      val droppedAgenda = agenda.devices
+      // handle error here
+
+
   }
 
 }
