@@ -116,10 +116,10 @@ class DeviceControl extends Actor {
       sender() ! agenda
 
     case c : ChangeADay =>
-      val droppedAgenda = agenda.devices
-      // handle error here
+      val deviceChanged = agenda.devices.find(d => d.device == c.sourceCaptor)
+      val newDevice = DeviceFrequency(deviceChanged.get.freqs.filter(_.day == c.source.day) ++ c.to, deviceChanged.get.device)
 
-
+      agenda.devices.updated(agenda.devices.indexWhere(_.device == c.sourceCaptor), newDevice)
   }
 
 }
