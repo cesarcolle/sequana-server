@@ -1,8 +1,8 @@
 
 import java.net.{InetAddress, UnknownHostException}
 
-import DeviceControl.Frequencies
-import akka.actor.{Actor, ActorSystem}
+import DeviceControl.{Frequencies, GetAllAgenda, RestartTo}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.marshalling.Marshal
@@ -10,12 +10,19 @@ import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
+import akka.pattern.ask
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 
 object WebServer extends  JsonSupport {
+  implicit def system: ActorSystem = ActorSystem("Sophia-system")
+
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  implicit def system: ActorSystem = ActorSystem()
+  val deviceActor: ActorRef = system.actorOf(DeviceControl.props)
+
 
   val sequanaRoute: Route = concat(
     path("restartFrequencies") {
@@ -31,9 +38,20 @@ object WebServer extends  JsonSupport {
         complete("heyho")
       }
     }
+    ,path("getAgenda"){
+      get {
+        val agenda = (deviceActor ? GetAllAgenda()).mapTo[Frequencies]
+        complete(agenda)
+      }
+    }
   )
   def main(args: Array[String]): Unit = {
-    println("start")
+
+    Http().bindAndHandle(sequanaRoute, "localhost", 8080)
+
+    println("server started... at localhost:" + 8080)
+
+    Await.result(system.whenTerminated, Duration.Inf)
   }
 }
 // JSON SUPPORT
@@ -42,50 +60,62 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val frequenciesM: RootJsonFormat[Frequencies] = jsonFormat1(Frequencies)
   implicit val deviceFrequencyM: RootJsonFormat[DeviceFrequency] = jsonFormat2(DeviceFrequency)
   implicit val tickM: RootJsonFormat[Tick] = jsonFormat4(Tick)
-  implicit val durationM: RootJsonFormat[Duration] = jsonFormat2(Duration)
+  implicit val durationM: RootJsonFormat[DurationTick] = jsonFormat2(DurationTick)
+}
+
+// COMPANION
+object DeviceControl {
+
+  case class Frequencies(devices : List[DeviceFrequency])
+  case class DeviceFrequency(freqs: List[Tick], device : String)
+  case class Tick(day: String, hour: Int, min: Int, duration: DurationTick)
+  case class DurationTick(hour: Int, min: Int)
+
+  case class RestartTo(frenquences : Frequencies)
+  case class GetAllAgenda()
+
+
+  val props: Props = Props[DeviceControl]
 }
 
 // ACTOR
-
-object DeviceControl {
-  case class Frequencies(devices : List[DeviceFrequency])
-  case class DeviceFrequency(freqs: List[Tick], device : String)
-  case class Tick(day: String, hour: Int, min: Int, duration: Duration)
-  case class Duration(hour: Int, min: Int)
-}
-
 class DeviceControl extends Actor {
   import akka.http.scaladsl.model._
   val device: Map[String, String] = NetworkFinder.addressDeviceByName()
 
-  implicit val system = ActorSystem()
-  val http = Http(system)
+  var agenda : Frequencies = _
+
+  val http = Http(context.system)
 
   override def receive: Receive = {
 
     // Manage frequency changes
-    case f : Frequencies =>
-      f.devices.foreach(d =>
+    case f : RestartTo =>
+      f.frenquences.devices.foreach(d =>
         Marshal(d.freqs).to[RequestEntity] flatMap { entity =>
           val request = HttpRequest(method = HttpMethods.POST, uri = device(d.device), entity = entity)
           http.singleRequest(request = request)
         }
       )
       // TODO : Do the rest.
+
+    case GetAllAgenda() =>
+      sender() ! agenda
   }
+
 }
 
 // UTIL
 
 object NetworkFinder {
 
-  val devices = List()// TO BE COMPLETED
+  val devices = 1
 
 
   def addressDeviceByName() : Map[String, String] = {
     var result = Map.empty[String, String]
     // Translate hostname by their Adress IP !
-    for (inet <- devices.indices){
+    for (inet <-  1 until devices){
       try{
         // The 192.... have to be changed.
         val inetAdress = InetAddress.getByName("192.168.0.0." + inet.toString)
