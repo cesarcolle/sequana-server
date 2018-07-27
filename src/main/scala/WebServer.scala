@@ -125,7 +125,6 @@ class DeviceControl extends Actor {
 }
 
 // UTIL
-
 object NetworkFinder {
 
   val devices = 1
